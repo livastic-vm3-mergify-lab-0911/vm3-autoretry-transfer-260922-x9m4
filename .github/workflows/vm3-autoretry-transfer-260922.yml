@@ -1,0 +1,36 @@
+name: vm3-autoretry-transfer-pipeline-260922
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vm3-transfer-trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail first workflow attempt only
+        shell: bash
+        run: |
+          echo "VM3_TRANSFER_TRIGGER attempt=$GITHUB_RUN_ATTEMPT"
+          if [ "$GITHUB_RUN_ATTEMPT" = "1" ]; then
+            echo VM3_TRANSFER_ATTEMPT1_FAIL
+            exit 1
+          fi
+          echo VM3_TRANSFER_RETRY_PASS
+  vm3-transfer-write-side-effect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Write controlled canary in every workflow attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="vm3-transfer-side-effect-attempt-${GITHUB_RUN_ATTEMPT}.txt"
+          CONTENT=$(printf 'VM3_TRANSFER_WRITE attempt=%s run=%s repo=%s\n' "$GITHUB_RUN_ATTEMPT" "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" | base64 -w0)
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$FILE" \
+            -f message="VM3 transfer side effect attempt $GITHUB_RUN_ATTEMPT" \
+            -f content="$CONTENT" \
+            -f branch='vm3-transfer-canary-260922' \
+            --jq '{path:.content.path,sha:.commit.sha}'
